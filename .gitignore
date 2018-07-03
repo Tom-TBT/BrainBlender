@@ -1,2 +1,4 @@
 *.obj
-./brain_structures
+./resources/brain_structures/*
+./resources/images/*
+./resources/allen_rsp/*
