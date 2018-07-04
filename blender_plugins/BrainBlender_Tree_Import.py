@@ -49,6 +49,12 @@ bpy.types.Scene.bb_use_smooth_shade = bpy.props.BoolProperty \
     description = "Smooth the output faces (recommended)",
     default = True
     )
+bpy.types.Scene.bb_import_parents = bpy.props.BoolProperty \
+    (
+    name = "Import Parents",
+    description = "Import also the parent meshes",
+    default = True
+    )
 bpy.types.Scene.bb_remesh_octree_depth = bpy.props.IntProperty \
     (
     name = "Remesh Resolution",
@@ -104,6 +110,7 @@ class wavefrontPanel(bpy.types.Panel):
 
         row = self.layout.row()
         row.prop(context.scene , "bb_tree_depth")
+        row.prop(context.scene , "bb_import_parents")
 
         row = self.layout.row()
         row.operator("bb_tree_import.obj", text='Import Object(s)', icon='MESH_ICOSPHERE')
@@ -120,7 +127,7 @@ class importButton(bpy.types.Operator):
     def execute(self, context):
 
         items = [file.name for file in self.files]
-        treeImport(self.directory,items)
+        bb_treeImport(self.directory,items)
 
         return {'FINISHED'}
 
@@ -146,8 +153,14 @@ def scale_object(obj_to_scale):
     bpy.context.scene.objects.active = obj_to_scale
     bpy.data.objects.get(obj_to_scale.name).select = True
     obj_to_scale.scale = [s, s, s]  # anisotropic image stacks should be handled by the user
-    obj_to_scale.rotation_euler = [-0, 0, 0]
-    bpy.ops.object.transform_apply(scale=True)
+
+#    bpy.ops.object.transform_apply(scale=True)
+
+def rotate_object(obj_to_rotate):
+    """Used only to set no rotation to nothing."""
+    bpy.context.scene.objects.active = obj_to_rotate
+    obj_to_rotate.rotation_euler = [-0, 0, 0]
+    bpy.ops.object.transform_apply(rotation=True)
 
 def recursive_import(depth,dir):
     childs = []
@@ -156,23 +169,33 @@ def recursive_import(depth,dir):
     scn = bpy.context.scene
 
     for f in onlyfiles:
+        acronym = f[f.find("(")+1:f.find(")")]
 
-        if depth == 0 or not os.path.isdir(os.path.join(dir,f[:-4])):
+        if depth == 0 or not os.path.isdir(os.path.join(dir,acronym)):
             bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
             childs.append(bpy.context.selected_objects[0])
+            rotate_object(bpy.context.selected_objects[0])
             if bpy.context.scene.bb_remesh_when_importing:
                 remesh_when_importing(bpy.context.selected_objects[0])
         else:
-            parent_structure = bpy.data.objects.new(f[:-4], None )
-            scn.objects.link(parent_structure)
-            to_link = recursive_import(depth-1,os.path.join(dir,f[:-4]))
+            if bpy.context.scene.bb_import_parents:
+                bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
+                parent_structure = bpy.context.selected_objects[0]
+                rotate_object(parent_structure)
+                if bpy.context.scene.bb_remesh_when_importing:
+                    remesh_when_importing(parent_structure)
+            else:
+                parent_structure = bpy.data.objects.new(f[:-4], None )
+                scn.objects.link(parent_structure)
+
+            to_link = recursive_import(depth-1,os.path.join(dir,acronym))
             for o in to_link:
                 o.parent = parent_structure
             childs.append(parent_structure)
 
     return childs
 
-def treeImport(dir,files):
+def bb_treeImport(dir,files):
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -183,32 +206,30 @@ def treeImport(dir,files):
         if tree_depth == 0:
             if f[-4:] == '.obj':
                 bpy.ops.import_scene.obj(filepath=dir + f)
+
+                rotate_object(bpy.context.selected_objects[0])
+                if bpy.context.scene.bb_remesh_when_importing:
+                    remesh_when_importing(bpy.context.selected_objects[0])
                 scale_object(bpy.context.selected_objects[0])
-                remesh_when_importing(bpy.context.selected_objects[0])
         else:
-            parent_structure = bpy.data.objects.new(f[:-4], None )
-            scn.objects.link(parent_structure)
-            to_link = recursive_import(tree_depth,dir+f[:-4])
+            acronym = f[f.find("(")+1:f.find(")")]
+            if bpy.context.scene.bb_import_parents:
+                bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
+                parent_structure = bpy.context.selected_objects[0]
+                rotate_object(parent_structure)
+                if bpy.context.scene.bb_remesh_when_importing:
+                    remesh_when_importing(bpy.context.selected_objects[0])
+            else:
+
+                parent_structure = bpy.data.objects.new(f[:-4], None )
+                scn.objects.link(parent_structure)
+
+            to_link = recursive_import(tree_depth-1,dir+acronym)
             for o in to_link:
                 o.parent = parent_structure
+                rotate_object(o)
 
             scale_object(parent_structure)
-#            bpy.context.scene.objects.active = parent_structure
-#            bpy.data.objects.get(parent_structure.name).select = True
-#            parent_structure.scale = [s, s, s]  # anisotropic image stacks should be handled by the user
-#            parent_structure.rotation_euler = [-0, 0, 0]
-#            bpy.ops.object.transform_apply(scale=True)
-
-#            if bpy.context.scene.bb_remesh_when_importing == True:
-#
-#                parent_structure.modifiers.new("import_remesh", type='REMESH')
-#                parent_structure.modifiers['import_remesh'].octree_depth = bpy.context.scene.bb_remesh_octree_depth
-#                parent_structure.modifiers['import_remesh'].mode = 'SMOOTH'
-#                parent_structure.modifiers['import_remesh'].use_smooth_shade = bpy.context.scene.bb_use_smooth_shade
-#                parent_structure.modifiers['import_remesh'].use_remove_disconnected = False
-#                if bpy.context.scene.bb_apply_remesh == True:
-#                    bpy.context.scene.objects.active = parent_structure
-#                    bpy.ops.object.modifier_apply(modifier='import_remesh')
 
 
 def register():

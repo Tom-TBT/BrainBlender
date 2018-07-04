@@ -28,8 +28,25 @@ from allensdk.core.structure_tree import StructureTree
 
 import os
 import nrrd
+import numpy as np
 
+def export_obj(structure_id, name, path):
+    """Export given structure id to the give path"""
+#    acronym = tree.get_structures_by_id([structure_id])[0]["acronym"]
+#    acronym = acronym.replace("/","-")
+    structure_mask = rsp.make_structure_mask([structure_id])
+    try:
+        verts, faces, normals, values = measure.marching_cubes_lewiner(structure_mask, 0)
+    except (RuntimeError):
+        return
 
+    if not os.path.exists(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
+    with open(path+name+".obj",'w') as file:
+        for vert in verts:
+            file.write("v "+str(vert[0])+" "+str(vert[1])+" "+str(vert[2])+"\n")
+        for face in faces:
+            file.write("f "+str(face[0]+1)+" "+str(face[1]+1)+" "+str(face[2]+1)+"\n")
 
 graph_id = 1 # Graph_id is the id of the structure we want to load. 1 is the id of the adult mouse structure graph
 
@@ -40,7 +57,7 @@ structure_graph = StructureTree.clean_structures(structure_graph)
 tree = StructureTree(structure_graph)
 
 # the annotation download writes a file, so we will need somwhere to put it
-annotation_dir = 'E:\\allen\\annotation'
+annotation_dir = 'E:\\Histology\\allen_rsp'
 
 annotation_path = os.path.join(annotation_dir, 'annotation.nrrd')
 
@@ -58,31 +75,16 @@ swapped_ann = swapped_ann[:,:,::-1] #Revert the z axis so the 0 is the ventral p
 
 rsp = ReferenceSpace(tree, swapped_ann, [25, 25, 25])
 
-def export_obj(structure_id, path_parent):
-    acronym = tree.get_structures_by_id([structure_id])[0]["acronym"]
-    acronym = acronym.replace("/","-")
-    structure_mask = rsp.make_structure_mask([structure_id])
-    try:
-        verts, faces, normals, values = measure.marching_cubes_lewiner(structure_mask, 0)
-    except (RuntimeError):
-        return
-
-    path = "E:\\allen\\obj\\structures\\"+path_parent
-    if not os.path.exists(os.path.dirname(path)):
-        os.makedirs(os.path.dirname(path))
-    with open(path+acronym+".obj",'w') as file:
-        for vert in verts:
-            file.write("v "+str(vert[0])+" "+str(vert[1])+" "+str(vert[2])+"\n")
-        for face in faces:
-            file.write("f "+str(face[0]+1)+" "+str(face[1]+1)+" "+str(face[2]+1)+"\n")
-
-##HEEERRE COME THE OBJ CREATION
+root_path = "E:\\Histology\\brain_structures\\"
+##Here comes the obj creation
 for struct in structure_graph:
     path_parent = ""
     for parent_id in struct["structure_id_path"][:-1]:
-        acronym_parent = tree.get_structures_by_id([parent_id])[0]["acronym"]
-        acronym_parent = acronym_parent.replace("/","-")
-        path_parent = path_parent + acronym_parent + "\\"
+        name_parent = tree.get_structures_by_id([parent_id])[0]["acronym"]
+        name_parent = name_parent.replace("/","-")
+        path_parent = path_parent + name_parent + "\\"
     struct_id = struct["id"]
-    export_obj(struct_id, path_parent)
+    name = tree.get_structures_by_id([struct_id])[0]["name"] + " ("+ tree.get_structures_by_id([struct_id])[0]["acronym"] + ")"
+    name = name.replace("/","-")
+    export_obj(struct_id,name, root_path+path_parent)
     print(struct["name"])
