@@ -30,13 +30,17 @@ import os
 import nrrd
 import numpy as np
 
+# Need to download http://help.brain-map.org/display/mouseconnectivity/API
+
 def export_obj(structure_id, name, path):
     """Export given structure id to the give path"""
 #    acronym = tree.get_structures_by_id([structure_id])[0]["acronym"]
 #    acronym = acronym.replace("/","-")
     structure_mask = rsp.make_structure_mask([structure_id])
+    half_mask = structure_mask[:,:228,:]
+#    half_mask[:,228,:] = 0
     try:
-        verts, faces, normals, values = measure.marching_cubes_lewiner(structure_mask, 0)
+        verts, faces, normals, values = measure.marching_cubes_lewiner(half_mask, 0)
     except (RuntimeError):
         return
 
@@ -59,25 +63,25 @@ tree = StructureTree(structure_graph)
 # the annotation download writes a file, so we will need somwhere to put it
 annotation_dir = 'E:\\Histology\\allen_rsp'
 
-annotation_path = os.path.join(annotation_dir, 'annotation.nrrd')
+annotation_path = os.path.join(annotation_dir, 'annotation_10.nrrd')
 
 # this is a string which contains the name of the latest ccf version
 annotation_version = MouseConnectivityApi.CCF_VERSION_DEFAULT
 
 mcapi = MouseConnectivityApi()
 #Next line commented because the annotation volume is already downloaded
-#mcapi.download_annotation_volume(annotation_version, 25, annotation_path)
+mcapi.download_annotation_volume(annotation_version, 10, annotation_path)
 
 annotation, meta = nrrd.read(annotation_path)
 
 swapped_ann = np.swapaxes(annotation,1,2)
 swapped_ann = swapped_ann[:,:,::-1] #Revert the z axis so the 0 is the ventral part
 
-rsp = ReferenceSpace(tree, swapped_ann, [25, 25, 25])
+rsp = ReferenceSpace(tree, swapped_ann, [10, 10, 10])
 
-root_path = "E:\\Histology\\brain_structures\\"
+root_path = "E:\\Histology\\brain_structures_half_not_close_10\\"
 ##Here comes the obj creation
-for struct in structure_graph:
+for struct in structure_graph[:1]:
     path_parent = ""
     for parent_id in struct["structure_id_path"][:-1]:
         name_parent = tree.get_structures_by_id([parent_id])[0]["acronym"]
