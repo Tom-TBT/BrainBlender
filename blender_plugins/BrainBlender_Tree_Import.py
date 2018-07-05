@@ -150,7 +150,7 @@ def remesh_when_importing(obj_to_remesh):
 def scale_object(obj_to_scale):
     s = bpy.context.scene.bb_pix_scale
 
-    bpy.context.scene.objects.active = obj_to_scale
+#    bpy.context.scene.objects.active = obj_to_scale
     bpy.data.objects.get(obj_to_scale.name).select = True
     obj_to_scale.scale = [s, s, s]  # anisotropic image stacks should be handled by the user
 
@@ -158,12 +158,31 @@ def scale_object(obj_to_scale):
 
 def rotate_object(obj_to_rotate):
     """Used only to set no rotation to nothing."""
-    bpy.context.scene.objects.active = obj_to_rotate
+#    bpy.context.scene.objects.active = obj_to_rotate
     obj_to_rotate.rotation_euler = [-0, 0, 0]
     bpy.ops.object.transform_apply(rotation=True)
 
+def set_origin_and_mirror(obj_to_mirror):
+    resolution = 0.025
+
+
+    obj_to_mirror.modifiers.new("mirror", type='MIRROR')
+    obj_to_mirror.modifiers["mirror"].use_x = False
+    obj_to_mirror.modifiers["mirror"].use_y = True
+
+    saved_location = bpy.context.scene.cursor_location.copy()
+    bpy.context.scene.objects.active = obj_to_mirror
+    bpy.data.objects.get(obj_to_mirror.name).select = True
+    bpy.context.scene.cursor_location = (6.6, 5.7 - resolution, 4.0)
+    bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+    bpy.context.scene.cursor_location = saved_location
+
+
+
 def recursive_import(depth,dir):
     childs = []
+    if not os.path.isdir(dir):
+        return childs
     onlyfiles = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f)) and f[-4:] == '.obj']
 
     scn = bpy.context.scene
@@ -175,15 +194,19 @@ def recursive_import(depth,dir):
             bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
             childs.append(bpy.context.selected_objects[0])
             rotate_object(bpy.context.selected_objects[0])
+
             if bpy.context.scene.bb_remesh_when_importing:
                 remesh_when_importing(bpy.context.selected_objects[0])
+            set_origin_and_mirror(bpy.context.selected_objects[0])
         else:
             if bpy.context.scene.bb_import_parents:
                 bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
                 parent_structure = bpy.context.selected_objects[0]
                 rotate_object(parent_structure)
+
                 if bpy.context.scene.bb_remesh_when_importing:
                     remesh_when_importing(parent_structure)
+                set_origin_and_mirror(parent_structure)
             else:
                 parent_structure = bpy.data.objects.new(f[:-4], None )
                 scn.objects.link(parent_structure)
@@ -208,15 +231,18 @@ def bb_treeImport(dir,files):
                 bpy.ops.import_scene.obj(filepath=dir + f)
 
                 rotate_object(bpy.context.selected_objects[0])
+
                 if bpy.context.scene.bb_remesh_when_importing:
                     remesh_when_importing(bpy.context.selected_objects[0])
                 scale_object(bpy.context.selected_objects[0])
+                set_origin_and_mirror(bpy.context.selected_objects[0])
         else:
             acronym = f[f.find("(")+1:f.find(")")]
             if bpy.context.scene.bb_import_parents:
                 bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
                 parent_structure = bpy.context.selected_objects[0]
                 rotate_object(parent_structure)
+
                 if bpy.context.scene.bb_remesh_when_importing:
                     remesh_when_importing(bpy.context.selected_objects[0])
             else:
@@ -230,6 +256,7 @@ def bb_treeImport(dir,files):
                 rotate_object(o)
 
             scale_object(parent_structure)
+            set_origin_and_mirror(parent_structure)
 
 
 def register():
