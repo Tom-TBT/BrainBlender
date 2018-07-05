@@ -150,20 +150,14 @@ def remesh_when_importing(obj_to_remesh):
 def scale_object(obj_to_scale):
     s = bpy.context.scene.bb_pix_scale
 
-#    bpy.context.scene.objects.active = obj_to_scale
+    bpy.context.scene.objects.active = obj_to_scale
     bpy.data.objects.get(obj_to_scale.name).select = True
     obj_to_scale.scale = [s, s, s]  # anisotropic image stacks should be handled by the user
 
-#    bpy.ops.object.transform_apply(scale=True)
-
-def rotate_object(obj_to_rotate):
-    """Used only to set no rotation to nothing."""
-#    bpy.context.scene.objects.active = obj_to_rotate
-    obj_to_rotate.rotation_euler = [-0, 0, 0]
-    bpy.ops.object.transform_apply(rotation=True)
+    bpy.ops.object.transform_apply(scale=True)
 
 def set_origin_and_mirror(obj_to_mirror):
-    resolution = 0.025
+    resolution = bpy.context.scene.bb_pix_scale
 
 
     obj_to_mirror.modifiers.new("mirror", type='MIRROR')
@@ -177,86 +171,53 @@ def set_origin_and_mirror(obj_to_mirror):
     bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
     bpy.context.scene.cursor_location = saved_location
 
-
-
-def recursive_import(depth,dir):
-    childs = []
+def recursive_import(depth,dir, f_names=None):
+    new_meshes = []
     if not os.path.isdir(dir):
-        return childs
-    onlyfiles = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f)) and f[-4:] == '.obj']
+        return new_meshes
 
+    if f_names is None:
+        f_names = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f)) and f[-4:] == '.obj']
     scn = bpy.context.scene
 
-    for f in onlyfiles:
-        acronym = f[f.find("(")+1:f.find(")")]
+    for f in f_names:
 
-        if depth == 0 or not os.path.isdir(os.path.join(dir,acronym)):
-            bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
-            childs.append(bpy.context.selected_objects[0])
-            rotate_object(bpy.context.selected_objects[0])
+        childs = []
+        acronym = f[f.find("(")+1:f.find(")")]
+        if depth!=0 and os.path.isdir(os.path.join(dir,acronym)):
+
+            childs = recursive_import(depth-1,os.path.join(dir,acronym))
+
+        if depth == 0 or bpy.context.scene.bb_import_parents or not os.path.isdir(os.path.join(dir,acronym)):
+
+            bpy.ops.import_scene.obj(filepath=os.path.join(dir, f),axis_forward="Y",axis_up="Z")
+            current_mesh = bpy.context.selected_objects[0]
 
             if bpy.context.scene.bb_remesh_when_importing:
-                remesh_when_importing(bpy.context.selected_objects[0])
-            set_origin_and_mirror(bpy.context.selected_objects[0])
+                remesh_when_importing(current_mesh)
+            scale_object(current_mesh)
+
         else:
-            if bpy.context.scene.bb_import_parents:
-                bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
-                parent_structure = bpy.context.selected_objects[0]
-                rotate_object(parent_structure)
+            current_mesh = bpy.data.objects.new(f[:-4], None )
+            scn.objects.link(current_mesh)
 
-                if bpy.context.scene.bb_remesh_when_importing:
-                    remesh_when_importing(parent_structure)
-                set_origin_and_mirror(parent_structure)
-            else:
-                parent_structure = bpy.data.objects.new(f[:-4], None )
-                scn.objects.link(parent_structure)
-
-            to_link = recursive_import(depth-1,os.path.join(dir,acronym))
-            for o in to_link:
-                o.parent = parent_structure
-            childs.append(parent_structure)
-
-    return childs
+        new_meshes.append(current_mesh)
+        for o in childs:
+            o.parent = current_mesh
+        if depth == 0 or bpy.context.scene.bb_import_parents or not os.path.isdir(os.path.join(dir,acronym)):
+            set_origin_and_mirror(bpy.context.selected_objects[0])
+    return new_meshes
 
 def bb_treeImport(dir,files):
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode='OBJECT')
 
     tree_depth = bpy.context.scene.bb_tree_depth
-    scn = bpy.context.scene
 
     for f in files:
-        if tree_depth == 0:
-            if f[-4:] == '.obj':
-                bpy.ops.import_scene.obj(filepath=dir + f)
+        if f[-4:] == '.obj':
+            parent_structure = recursive_import(tree_depth,dir,[f])
 
-                rotate_object(bpy.context.selected_objects[0])
-
-                if bpy.context.scene.bb_remesh_when_importing:
-                    remesh_when_importing(bpy.context.selected_objects[0])
-                scale_object(bpy.context.selected_objects[0])
-                set_origin_and_mirror(bpy.context.selected_objects[0])
-        else:
-            acronym = f[f.find("(")+1:f.find(")")]
-            if bpy.context.scene.bb_import_parents:
-                bpy.ops.import_scene.obj(filepath=os.path.join(dir, f))
-                parent_structure = bpy.context.selected_objects[0]
-                rotate_object(parent_structure)
-
-                if bpy.context.scene.bb_remesh_when_importing:
-                    remesh_when_importing(bpy.context.selected_objects[0])
-            else:
-
-                parent_structure = bpy.data.objects.new(f[:-4], None )
-                scn.objects.link(parent_structure)
-
-            to_link = recursive_import(tree_depth-1,dir+acronym)
-            for o in to_link:
-                o.parent = parent_structure
-                rotate_object(o)
-
-            scale_object(parent_structure)
-            set_origin_and_mirror(parent_structure)
 
 
 def register():
